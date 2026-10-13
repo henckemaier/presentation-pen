@@ -1,0 +1,10 @@
+# Build do .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+
+# Saídas geradas (publicadas como Release no GitHub, não no código)
+publish/
+installer/Output/

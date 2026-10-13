@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- gerado por tools\make-icon.ps1 -->
+    <ApplicationIcon>..\..\assets\PresentationPen.ico</ApplicationIcon>
+    <AssemblyName>PresentationPen</AssemblyName>
+    <RootNamespace>PresentationPen</RootNamespace>
+    <Product>PresentationPen</Product>
+    <Version>1.0.0</Version>
+    <!-- O manifesto PerMonitorV2 é necessário para o WPF; o aviso do WinForms não se aplica. -->
+    <NoWarn>$(NoWarn);WFO0003</NoWarn>
+  </PropertyGroup>
+
+</Project>
