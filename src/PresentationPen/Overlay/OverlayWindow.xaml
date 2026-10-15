@@ -3,15 +3,19 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="PresentationPen"
         WindowStyle="None"
-        AllowsTransparency="True"
-        Background="#01000000"
+        AllowsTransparency="False"
+        Background="Transparent"
         Topmost="True"
         ShowInTaskbar="False"
         ResizeMode="NoResize"
         WindowStartupLocation="Manual"
         Left="0" Top="0" Width="800" Height="600">
-    <!-- Fundo com alfa 1: invisível, mas captura os cliques (pixels com alfa 0 deixam o clique passar). -->
-    <Grid x:Name="RootGrid" ClipToBounds="True">
+    <!--
+      Transparência feita pelo DWM (ver EnableDwmTransparency), não por janela em camadas (AllowsTransparency):
+      a janela em camadas copia a tela inteira da GPU para a CPU a cada quadro, o que deixava o zoom pesado.
+      Uma janela comum recebe os cliques em toda a área, mesmo onde está transparente.
+    -->
+    <Grid x:Name="RootGrid" ClipToBounds="True" Background="Transparent">
         <Rectangle x:Name="BoardRect" Fill="White" Visibility="Collapsed" />
 
         <Grid x:Name="ContentRoot">
@@ -23,10 +27,11 @@
             </Grid.RenderTransform>
 
             <!-- imagem da tela salva junto com um rascunho (para continuar sobre ela) -->
+            <!-- Linear: interpolação simples feita pela GPU; HighQuality recalcula mipmaps e pesa no zoom -->
             <Image x:Name="DraftBackground" Stretch="Fill" Visibility="Collapsed"
-                   RenderOptions.BitmapScalingMode="HighQuality" />
+                   RenderOptions.BitmapScalingMode="Linear" />
             <Image x:Name="SnapshotImage" Stretch="Fill" Visibility="Collapsed"
-                   RenderOptions.BitmapScalingMode="HighQuality" />
+                   RenderOptions.BitmapScalingMode="Linear" />
             <Canvas x:Name="ShapeCanvas" Background="Transparent" />
             <InkCanvas x:Name="Ink" Background="Transparent" />
         </Grid>

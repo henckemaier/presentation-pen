@@ -13,7 +13,7 @@
     <AssemblyName>PresentationPen</AssemblyName>
     <RootNamespace>PresentationPen</RootNamespace>
     <Product>PresentationPen</Product>
-    <Version>1.0.0</Version>
+    <Version>1.0.1</Version>
     <!-- O manifesto PerMonitorV2 é necessário para o WPF; o aviso do WinForms não se aplica. -->
     <NoWarn>$(NoWarn);WFO0003</NoWarn>
   </PropertyGroup>

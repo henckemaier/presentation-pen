@@ -270,8 +270,9 @@ namespace PresentationPen
                 "  Ao sair com Esc, as alterações no rascunho aberto são salvas.\n\n" +
                 "NO ZOOM\n" +
                 "  Roda do mouse  aproximar/afastar   Ctrl+roda  espessura\n" +
-                "  Mover o mouse  navegar             Espaço  travar/destravar\n" +
-                "  Dá para desenhar por cima da imagem ampliada.";
+                "  Mover o mouse  navegar             Espaço ou botão direito  travar/soltar\n" +
+                "  Ao começar a desenhar, a imagem trava sozinha (não anda enquanto você mira).\n" +
+                "  O traço mantém na tela a espessura escolhida, em qualquer nível de zoom.";
 
             if (Overlay.IsVisible)
                 MessageBox.Show(Overlay, text, "PresentationPen — atalhos", MessageBoxButton.OK, MessageBoxImage.Information);

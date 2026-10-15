@@ -126,7 +126,7 @@ namespace PresentationPen.Toolbar
                 () => _overlay.ToggleBoard(BoardMode.White));
             _blackboardButton = MakeButton(BoardIcon(Brushes.Black), "Quadro preto (K)",
                 () => _overlay.ToggleBoard(BoardMode.Black));
-            _zoomButton = MakeButton("", "Zoom (Z) — roda do mouse ajusta, Espaço trava", _overlay.ToggleZoom, IconFont);
+            _zoomButton = MakeButton("", "Zoom (Z) — roda do mouse ajusta; Espaço ou botão direito trava/solta", _overlay.ToggleZoom, IconFont);
             ActionsPanel.Children.Add(_whiteboardButton);
             ActionsPanel.Children.Add(_blackboardButton);
             ActionsPanel.Children.Add(_zoomButton);
@@ -188,6 +188,10 @@ namespace PresentationPen.Toolbar
             _blackboardButton.Background = _overlay.Board == BoardMode.Black ? ActiveBrush : Brushes.Transparent;
             _zoomButton.Background = _overlay.IsZoomed ? ActiveBrush : Brushes.Transparent;
             _zoomButton.Content = _overlay.IsZoomed && _overlay.IsPanLocked ? "" : ""; // cadeado quando travado
+            ZoomHint.Visibility = _overlay.IsZoomed ? Visibility.Visible : Visibility.Collapsed;
+            ZoomHint.Text = _overlay.IsPanLocked
+                ? "Zoom travado para desenhar  ·  Espaço ou botão direito: soltar para navegar"
+                : "Zoom: mova o mouse para navegar  ·  roda: aproximar  ·  comece a desenhar para travar";
             // só faz sentido com um rascunho que tenha imagem de tela salva
             _backgroundButton.Visibility = _overlay.HasSavedBackground ? Visibility.Visible : Visibility.Collapsed;
             _backgroundButton.Background = _overlay.IsSavedBackgroundVisible ? ActiveBrush : Brushes.Transparent;

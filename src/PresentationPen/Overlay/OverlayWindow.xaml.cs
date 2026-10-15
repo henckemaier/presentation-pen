@@ -58,8 +58,30 @@ namespace PresentationPen.Overlay
             PreviewMouseWheel += OnPreviewMouseWheel;
             PreviewMouseMove += OnPreviewMouseMove;
             PreviewMouseLeftButtonDown += OnPreviewMouseLeftButtonDown;
+            PreviewMouseRightButtonDown += OnPreviewMouseRightButtonDown;
+            SourceInitialized += (_, _) => EnableDwmTransparency();
 
             ApplyTool();
+        }
+
+        /// <summary>
+        /// Deixa o fundo da janela transparente pela composição do DWM ("vidro" em toda a área).
+        /// É acelerado por GPU, ao contrário de AllowsTransparency, que reenvia a tela inteira a cada quadro.
+        /// </summary>
+        private void EnableDwmTransparency()
+        {
+            IntPtr hwnd = new WindowInteropHelper(this).Handle;
+            if (HwndSource.FromHwnd(hwnd) is { CompositionTarget: { } target })
+                target.BackgroundColor = Colors.Transparent;
+
+            var margins = new NativeMethods.MARGINS { Left = -1, Right = -1, Top = -1, Bottom = -1 };
+            NativeMethods.DwmExtendFrameIntoClientArea(hwnd, ref margins);
+
+            // Windows 11: sem cantos arredondados nem borda colorida em volta da tela
+            int corner = NativeMethods.DWMWCP_DONOTROUND;
+            NativeMethods.DwmSetWindowAttribute(hwnd, NativeMethods.DWMWA_WINDOW_CORNER_PREFERENCE, ref corner, sizeof(int));
+            uint border = NativeMethods.DWMWA_COLOR_NONE;
+            NativeMethods.DwmSetWindowAttribute(hwnd, NativeMethods.DWMWA_BORDER_COLOR, ref border, sizeof(uint));
         }
 
         public ToolbarWindow Bar { get; }
@@ -89,7 +111,13 @@ namespace PresentationPen.Overlay
         public event Action<string>? DraftAutoSaveFailed;
 
         private Color CurrentColor => Palette.Resolve(ColorIndex, Board);
-        private double TextFontSize => 12 + PenSize * 3;
+        /// <summary>
+        /// Os desenhos ficam dentro do conteúdo ampliado; dividir pelo zoom faz o traço ter na tela
+        /// a espessura escolhida (sem isso, uma caneta de 4 px viraria 16 px com zoom de 4×).
+        /// </summary>
+        private double ScreenScale => IsZoomed ? _zoom : 1;
+        private double EffectivePenSize => PenSize / ScreenScale;
+        private double TextFontSize => (12 + PenSize * 3) / ScreenScale;
 
         // ---------------------------------------------------------------- abrir / fechar
 
@@ -243,7 +271,7 @@ namespace PresentationPen.Overlay
         private void ApplyDrawingAttributes()
         {
             bool highlighter = Tool == DrawTool.Highlighter;
-            double size = highlighter ? Math.Max(12, PenSize * 4) : PenSize;
+            double size = (highlighter ? Math.Max(12, PenSize * 4) : PenSize) / ScreenScale;
             Ink.DefaultDrawingAttributes = new DrawingAttributes
             {
                 Color = CurrentColor,
@@ -340,6 +368,7 @@ namespace PresentationPen.Overlay
             UpdateSnapshotVisibility();
             UpdateLayout();
             UpdatePan(Mouse.GetPosition(RootGrid));
+            ApplyDrawingAttributes();
             RaiseState();
         }
 
@@ -352,6 +381,38 @@ namespace PresentationPen.Overlay
             ZoomTranslate.X = ZoomTranslate.Y = 0;
             SnapshotImage.Source = null;
             UpdateSnapshotVisibility();
+            ApplyDrawingAttributes();
+        }
+
+        /// <summary>Trava/destrava a imagem ampliada (Espaço, botão direito, ou sozinho ao começar a desenhar).</summary>
+        private void SetPanLocked(bool locked)
+        {
+            if (!IsZoomed || IsPanLocked == locked) return;
+            IsPanLocked = locked;
+            if (!locked) UpdatePan(Mouse.GetPosition(RootGrid));
+            RaiseState();
+        }
+
+        /// <summary>
+        /// Muda o nível de zoom. Destravado, a imagem segue o mouse; travado, o ponto sob o cursor
+        /// fica parado (dá para aproximar onde está desenhando sem a imagem "fugir").
+        /// </summary>
+        private void ZoomTo(double newZoom, Point mouse)
+        {
+            double old = _zoom;
+            _zoom = Math.Clamp(newZoom, MinZoom, MaxZoom);
+            if (IsPanLocked)
+            {
+                double w = RootGrid.ActualWidth, h = RootGrid.ActualHeight;
+                ZoomScale.ScaleX = ZoomScale.ScaleY = _zoom;
+                ZoomTranslate.X = Math.Clamp(mouse.X - (mouse.X - ZoomTranslate.X) * (_zoom / old), -(w * _zoom - w), 0);
+                ZoomTranslate.Y = Math.Clamp(mouse.Y - (mouse.Y - ZoomTranslate.Y) * (_zoom / old), -(h * _zoom - h), 0);
+            }
+            else
+            {
+                UpdatePan(mouse);
+            }
+            ApplyDrawingAttributes(); // mantém a espessura na tela
         }
 
         private void UpdateSnapshotVisibility()
@@ -383,7 +444,7 @@ namespace PresentationPen.Overlay
         private async Task<BitmapSource> CaptureBehindOverlayAsync()
         {
             bool excluded = NativeMethods.SetWindowDisplayAffinity(_hwnd, NativeMethods.WDA_EXCLUDEFROMCAPTURE);
-            if (!excluded) Opacity = 0;
+            if (!excluded) RootGrid.Opacity = 0;
             await Task.Delay(100);
             try
             {
@@ -393,7 +454,7 @@ namespace PresentationPen.Overlay
             finally
             {
                 if (excluded) NativeMethods.SetWindowDisplayAffinity(_hwnd, NativeMethods.WDA_NONE);
-                else Opacity = 1;
+                else RootGrid.Opacity = 1;
             }
         }
 
@@ -412,7 +473,7 @@ namespace PresentationPen.Overlay
             if (!ShapeTools.IsShapeTool(Tool)) return;
 
             _shapeStart = p;
-            _currentShape = ShapeTools.Create(Tool, CurrentColor, PenSize);
+            _currentShape = ShapeTools.Create(Tool, CurrentColor, EffectivePenSize);
             ShapeCanvas.Children.Add(_currentShape);
             ShapeCanvas.CaptureMouse();
             e.Handled = true;
@@ -761,7 +822,16 @@ namespace PresentationPen.Overlay
 
         private void OnPreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
+            // no zoom, começar a desenhar trava a imagem: ela não anda mais enquanto você mira o próximo traço
+            if (IsZoomed) SetPanLocked(true);
             if (Tool == DrawTool.Eraser) EraseElementAt(e.GetPosition(ShapeCanvas));
+        }
+
+        private void OnPreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            if (!IsZoomed) return;
+            SetPanLocked(!IsPanLocked); // botão direito: solta/trava a imagem para navegar
+            e.Handled = true;
         }
 
         private void OnPreviewMouseMove(object sender, MouseEventArgs e)
@@ -781,8 +851,7 @@ namespace PresentationPen.Overlay
             bool ctrl = (Keyboard.Modifiers & ModifierKeys.Control) != 0;
             if (IsZoomed && !ctrl)
             {
-                _zoom = Math.Clamp(_zoom * (e.Delta > 0 ? 1.25 : 0.8), MinZoom, MaxZoom);
-                UpdatePan(e.GetPosition(RootGrid));
+                ZoomTo(_zoom * (e.Delta > 0 ? 1.25 : 0.8), e.GetPosition(RootGrid));
                 return;
             }
             SetPenSize(PenSize + (e.Delta > 0 ? 1 : -1));
@@ -839,11 +908,7 @@ namespace PresentationPen.Overlay
                 case Key.K: ToggleBoard(BoardMode.Black); break;
                 case Key.Z: ToggleZoom(); break;
                 case Key.B: ToggleSavedBackground(); break;
-                case Key.Space when IsZoomed:
-                    IsPanLocked = !IsPanLocked;
-                    if (!IsPanLocked) UpdatePan(Mouse.GetPosition(RootGrid));
-                    RaiseState();
-                    break;
+                case Key.Space when IsZoomed: SetPanLocked(!IsPanLocked); break;
                 case Key.F1: HelpRequested?.Invoke(); break;
                 default: return;
             }

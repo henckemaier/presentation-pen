@@ -3,7 +3,7 @@
 ; (publica o app em ..\publish e depois roda o ISCC com a versão do .csproj)
 
 #ifndef AppVersion
-  #define AppVersion "1.0.0"
+  #define AppVersion "1.0.1"
 #endif
 #define AppName "PresentationPen"
 #define AppExe "PresentationPen.exe"

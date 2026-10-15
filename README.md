@@ -95,10 +95,11 @@ Funcionam com qualquer programa em primeiro plano (e podem ser trocados no insta
 |---|---|
 | Roda do mouse | Aproxima/afasta (1× a 8×) |
 | Mover o mouse | Navega pela imagem ampliada |
-| `Espaço` | Trava/destrava a posição |
+| Começar a desenhar | Trava a imagem automaticamente (ela não anda enquanto você mira o próximo traço) |
+| `Espaço` ou botão direito | Solta/trava a imagem para navegar |
 | `Ctrl` + roda | Espessura do traço |
 
-O zoom é feito sobre uma captura congelada da tela (como no ZoomIt), então dá para desenhar em cima da área ampliada.
+O zoom é feito sobre uma captura congelada da tela (como no ZoomIt), então dá para desenhar em cima da área ampliada. O traço mantém na tela a espessura escolhida em qualquer nível de zoom, e com a imagem travada a roda do mouse aproxima mantendo parado o ponto sob o cursor.
 
 ### Rascunhos
 
@@ -169,7 +170,7 @@ tools/make-icon.ps1            gera o ícone multi-tamanho
 
 ### Como funciona
 
-- **Overlay:** uma janela WPF sem borda, transparente e *topmost* cobre o monitor do cursor. O fundo tem opacidade 1/255 — invisível, mas suficiente para receber os cliques. Os traços usam `InkCanvas`; formas e textos ficam num `Canvas` por cima.
+- **Overlay:** uma janela WPF sem borda e *topmost* cobre o monitor do cursor. A transparência é feita pela composição do DWM (`DwmExtendFrameIntoClientArea`), acelerada por GPU — em vez de uma janela em camadas (`AllowsTransparency`), que reenviaria a tela inteira a cada quadro e deixava o zoom pesado. Os traços usam `InkCanvas`; formas e textos ficam num `Canvas` por cima.
 - **Esconder do compartilhamento:** a barra, os avisos e a lista de rascunhos usam `SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE)` (Windows 10 2004+), que os remove de qualquer captura de tela, enquanto o overlay com os desenhos continua sendo capturado normalmente.
 - **Atalhos globais:** `RegisterHotKey` numa janela *message-only*.
 - **Captura de tela:** `BitBlt` com `CAPTUREBLT`, que inclui janelas em camadas como o overlay.

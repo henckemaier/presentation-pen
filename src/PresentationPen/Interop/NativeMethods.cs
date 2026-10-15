@@ -80,6 +80,26 @@ namespace PresentationPen.Interop
             return GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, out uint dpiX, out _) == 0 ? dpiX / 96.0 : 1.0;
         }
 
+        [StructLayout(LayoutKind.Sequential)]
+        public struct MARGINS
+        {
+            public int Left, Right, Top, Bottom;
+        }
+
+        public const int DWMWA_WINDOW_CORNER_PREFERENCE = 33; // Windows 11
+        public const int DWMWCP_DONOTROUND = 1;
+        public const int DWMWA_BORDER_COLOR = 34;              // Windows 11
+        public const uint DWMWA_COLOR_NONE = 0xFFFFFFFE;
+
+        [DllImport("dwmapi.dll")]
+        public static extern int DwmExtendFrameIntoClientArea(IntPtr hWnd, ref MARGINS margins);
+
+        [DllImport("dwmapi.dll")]
+        public static extern int DwmSetWindowAttribute(IntPtr hWnd, int attribute, ref int value, int size);
+
+        [DllImport("dwmapi.dll")]
+        public static extern int DwmSetWindowAttribute(IntPtr hWnd, int attribute, ref uint value, int size);
+
         [DllImport("gdi32.dll")]
         public static extern bool DeleteObject(IntPtr hObject);
 
