@@ -13,7 +13,9 @@
     <AssemblyName>PresentationPen</AssemblyName>
     <RootNamespace>PresentationPen</RootNamespace>
     <Product>PresentationPen</Product>
-    <Version>1.0.2</Version>
+    <Version>1.0.3</Version>
+    <!-- não grava no executável o caminho da pasta do projeto (que inclui o nome do usuário do Windows) -->
+    <PathMap>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\..'))=/_/</PathMap>
     <!-- O manifesto PerMonitorV2 é necessário para o WPF; o aviso do WinForms não se aplica. -->
     <NoWarn>$(NoWarn);WFO0003</NoWarn>
   </PropertyGroup>
