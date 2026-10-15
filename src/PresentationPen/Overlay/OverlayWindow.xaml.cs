@@ -27,7 +27,9 @@ namespace PresentationPen.Overlay
         private const double InitialZoom = 2;
 
         private readonly Func<AppSettings> _settings;
+        private readonly Func<string> _draftsFolder;
         private readonly UndoManager _undo = new();
+        private readonly System.Threading.SemaphoreSlim _saveLock = new(1, 1);
         private IntPtr _hwnd;
         private Drawing.Rectangle _bounds;
         private bool _allowClose;
@@ -42,10 +44,11 @@ namespace PresentationPen.Overlay
         private BitmapSource? _lastDraftBackground;
         private bool _dirty;
 
-        public OverlayWindow(Func<AppSettings> settings)
+        public OverlayWindow(Func<AppSettings> settings, Func<string> draftsFolder)
         {
             InitializeComponent();
             _settings = settings;
+            _draftsFolder = draftsFolder;
             PenSize = Math.Clamp(settings().DefaultPenSize, MinPenSize, MaxPenSize);
             Bar = new ToolbarWindow(this);
 
@@ -109,6 +112,8 @@ namespace PresentationPen.Overlay
         /// <summary>Rascunho gravado automaticamente ao sair (caminho, miniatura).</summary>
         public event Action<string, BitmapSource?>? DraftAutoSaved;
         public event Action<string>? DraftAutoSaveFailed;
+        /// <summary>Saiu sem nenhum desenho na tela (a próxima abertura começa vazia).</summary>
+        public event Action? SessionCleared;
 
         private Color CurrentColor => Palette.Resolve(ColorIndex, Board);
         /// <summary>
@@ -143,32 +148,46 @@ namespace PresentationPen.Overlay
             RaiseState();
         }
 
+        /// <summary>
+        /// Sai do modo desenho. Os desenhos alterados são salvos como rascunho (o atual ou um novo) e,
+        /// por padrão, continuam lá ao voltar (ReopenDrawings).
+        /// </summary>
         public void CloseOverlay()
         {
             if (!IsVisible) return;
             FinishText();
             CancelShape();
-            AutoSaveDraft();
+
+            // fundo para o rascunho: o que já está na tela (rascunho aberto ou zoom); senão captura depois de esconder
+            BitmapSource? background = Board == BoardMode.None
+                ? DraftBackground.Source as BitmapSource ?? (IsZoomed ? SnapshotImage.Source as BitmapSource : null)
+                : null;
+            bool save = _settings().AutoSaveDraftOnClose && _dirty && HasDrawings;
             if (IsZoomed) ExitZoom();
 
             Bar.Hide();
             Hide();
 
-            if (!_settings().KeepDrawingsOnClose)
-            {
-                _undo.Apply(() =>
-                {
-                    Ink.Strokes.Clear();
-                    ShapeCanvas.Children.Clear();
-                });
-                _undo.Clear();
-                DraftBackground.Source = null;
-                _lastDraftBackground = null;
-                _draftPath = null;
-                _dirty = false;
-                SetBoard(BoardMode.None);
-            }
+            if (!HasDrawings) SessionCleared?.Invoke();
+            if (save) SaveOnCloseAsync(background);
+            else if (!_settings().ReopenDrawings) ResetContent();
             RaiseState();
+        }
+
+        /// <summary>Limpa tudo e esquece o rascunho atual (próxima abertura começa do zero).</summary>
+        private void ResetContent()
+        {
+            _undo.Apply(() =>
+            {
+                Ink.Strokes.Clear();
+                ShapeCanvas.Children.Clear();
+            });
+            _undo.Clear();
+            DraftBackground.Source = null;
+            _lastDraftBackground = null;
+            _draftPath = null;
+            _dirty = false;
+            SetBoard(BoardMode.None);
         }
 
         /// <summary>Fecha de verdade (ao sair do aplicativo).</summary>
@@ -382,6 +401,7 @@ namespace PresentationPen.Overlay
             SnapshotImage.Source = null;
             UpdateSnapshotVisibility();
             ApplyDrawingAttributes();
+            RefreshInkInputTransform();
         }
 
         /// <summary>Trava/destrava a imagem ampliada (Espaço, botão direito, ou sozinho ao começar a desenhar).</summary>
@@ -407,6 +427,7 @@ namespace PresentationPen.Overlay
                 ZoomScale.ScaleX = ZoomScale.ScaleY = _zoom;
                 ZoomTranslate.X = Math.Clamp(mouse.X - (mouse.X - ZoomTranslate.X) * (_zoom / old), -(w * _zoom - w), 0);
                 ZoomTranslate.Y = Math.Clamp(mouse.Y - (mouse.Y - ZoomTranslate.Y) * (_zoom / old), -(h * _zoom - h), 0);
+                RefreshInkInputTransform();
             }
             else
             {
@@ -438,7 +459,16 @@ namespace PresentationPen.Overlay
             double fy = Math.Clamp(mouse.Y / h, 0, 1);
             ZoomTranslate.X = -fx * (w * _zoom - w);
             ZoomTranslate.Y = -fy * (h * _zoom - h);
+            RefreshInkInputTransform();
         }
+
+        /// <summary>
+        /// O desenho ao vivo do InkCanvas (DynamicRenderer) guarda a conversão tela → desenho e só a atualiza
+        /// numa passagem de layout. Mudar o zoom mexe só na RenderTransform, que não dispara layout; aí o
+        /// primeiro ponto de um traço saía com a posição antiga e aparecia uma linha reta até o início do traço.
+        /// Invalidar o arranjo força o layout (prioridade Render, antes da próxima entrada do mouse).
+        /// </summary>
+        private void RefreshInkInputTransform() => Ink.InvalidateArrange();
 
         /// <summary>Captura o monitor sem o próprio overlay (para não duplicar os desenhos no zoom).</summary>
         private async Task<BitmapSource> CaptureBehindOverlayAsync()
@@ -684,25 +714,48 @@ namespace PresentationPen.Overlay
                 _draftPath = newPath;
         }
 
-        /// <summary>Ao sair, grava as alterações no rascunho que está aberto (sem perguntar).</summary>
-        private void AutoSaveDraft()
+        /// <summary>
+        /// Salva os desenhos ao sair (no rascunho atual ou num novo), sem perguntar. Roda depois de esconder
+        /// a janela: assim a captura da tela de fundo sai sem os desenhos e o atalho responde na hora.
+        /// </summary>
+        private async void SaveOnCloseAsync(BitmapSource? background)
         {
-            if (_draftPath == null || !_dirty || !HasDrawings || !_settings().AutoSaveOpenDraftOnClose) return;
             try
             {
-                // usa a imagem de fundo que já existe; capturar a tela agora atrasaria o fechamento
-                var background = DraftBackground.Source as BitmapSource
-                    ?? (IsZoomed ? SnapshotImage.Source as BitmapSource : null)
-                    ?? _lastDraftBackground;
-                var doc = BuildDraft(Board == BoardMode.None ? background : null);
-                DraftStore.Save(_draftPath, doc);
-                _dirty = false;
-                DraftAutoSaved?.Invoke(_draftPath, doc.Thumbnail);
+                if (background == null && Board == BoardMode.None)
+                {
+                    await Task.Delay(150); // tempo para a janela sumir da tela
+                    if (!IsVisible)
+                    {
+                        using var bmp = ScreenCaptureService.CaptureBitmap(_bounds);
+                        background = ScreenCaptureService.ToBitmapSource(bmp);
+                    }
+                    else
+                    {
+                        background = _lastDraftBackground; // reabriu antes: a captura pegaria os desenhos
+                    }
+                }
+
+                var doc = BuildDraft(background);
+                string path = _draftPath ?? DraftStore.NewPath(_draftsFolder());
+                _draftPath = path;
+                _lastDraftBackground = background;
+                _dirty = false; // mudanças feitas a partir daqui (se reabrir) entram no próximo salvamento
+
+                await _saveLock.WaitAsync(); // salvamentos seguidos não podem escrever o mesmo arquivo juntos
+                try { await Task.Run(() => DraftStore.Save(path, doc)); }
+                finally { _saveLock.Release(); }
+                DraftAutoSaved?.Invoke(path, doc.Thumbnail);
             }
             catch (Exception ex)
             {
+                _dirty = true;
                 App.LogError(ex);
                 DraftAutoSaveFailed?.Invoke(ex.Message);
+            }
+            finally
+            {
+                if (!_settings().ReopenDrawings && !IsVisible) ResetContent();
             }
         }
 

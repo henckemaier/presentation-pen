@@ -107,8 +107,9 @@ O zoom é feito sobre uma captura congelada da tela (como no ZoomIt), então dá
 - `Ctrl+O` (ou *Abrir rascunho...* no menu da bandeja) abre a lista de rascunhos. Nela:
   - **Renomear**: botão *Renomear*, `F2` ou clique direito;
   - **Mostrar a imagem da tela salva**: abre o rascunho sobre a tela original em vez da tela atual (depois de aberto, alterne com `B`).
-- Depois de abrir ou salvar um rascunho, `Ctrl+S` grava nele mesmo, e ao sair com `Esc` as alterações são salvas automaticamente.
-- Depois de *Limpar tudo*, o próximo `Ctrl+S` cria um rascunho novo (não sobrescreve o anterior).
+- **Ao sair do modo desenho** (`Esc` ou `Ctrl+Shift+D`), os desenhos são salvos automaticamente como rascunho, e **ao voltar eles reaparecem** — inclusive depois de reiniciar o computador, e no mesmo quadro branco/preto em que foram feitos.
+- Depois de abrir ou salvar um rascunho, `Ctrl+S` e o salvamento ao sair gravam nele mesmo.
+- `Delete` (*Limpar tudo*) começa um rascunho novo: o anterior continua na lista e não é sobrescrito.
 
 > **Privacidade:** o arquivo `.ppen` guarda uma imagem da tela no momento em que foi salvo — inclusive outras janelas abertas. Tenha isso em mente antes de compartilhar um rascunho.
 
@@ -127,8 +128,8 @@ Pelo menu da bandeja: *Editar configurações...* abre o arquivo `%AppData%\Pres
 | `CopyScreenshotToClipboard` | `true` | Copia o screenshot para a área de transferência |
 | `ScreenshotSound` | `false` | Toca um som ao salvar (desligado porque iria junto se você compartilha o áudio do PC) |
 | `DraftsFolder` | `""` | Pasta dos rascunhos (vazio = `Documentos\PresentationPen\Rascunhos`) |
-| `AutoSaveOpenDraftOnClose` | `true` | Ao sair do modo desenho, salva as alterações no rascunho aberto |
-| `KeepDrawingsOnClose` | `false` | Mantém os desenhos na tela ao fechar e reabrir o modo desenho |
+| `AutoSaveDraftOnClose` | `true` | Ao sair do modo desenho, salva os desenhos alterados como rascunho (o atual ou um novo) |
+| `ReopenDrawings` | `true` | Ao voltar ao modo desenho, os desenhos da última vez reaparecem (também depois de reiniciar o app) |
 | `HideToolbarFromCapture` | `true` | Esconde barra, avisos e lista de rascunhos do compartilhamento de tela e dos screenshots |
 | `DefaultPenSize` | `4` | Espessura inicial (1 a 30) |
 

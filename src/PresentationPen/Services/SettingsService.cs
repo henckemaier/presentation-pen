@@ -23,11 +23,14 @@ namespace PresentationPen.Services
         /// <summary>Vazio = Documentos\PresentationPen\Rascunhos.</summary>
         public string DraftsFolder { get; set; } = "";
 
-        /// <summary>Ao sair do modo desenho, grava as alterações no rascunho aberto/salvo (se houver).</summary>
-        public bool AutoSaveOpenDraftOnClose { get; set; } = true;
+        /// <summary>Ao sair do modo desenho, salva os desenhos alterados como rascunho (o atual ou um novo).</summary>
+        public bool AutoSaveDraftOnClose { get; set; } = true;
 
-        /// <summary>Se true, os desenhos continuam lá ao fechar e reabrir o modo desenho.</summary>
-        public bool KeepDrawingsOnClose { get; set; } = false;
+        /// <summary>
+        /// Ao voltar ao modo desenho, os desenhos da última vez reaparecem (também depois de reiniciar o app).
+        /// Delete limpa e começa um rascunho novo.
+        /// </summary>
+        public bool ReopenDrawings { get; set; } = true;
 
         /// <summary>Se true, a barra de ferramentas, os avisos e a lista de rascunhos não aparecem no compartilhamento de tela nem nos screenshots.</summary>
         public bool HideToolbarFromCapture { get; set; } = true;

@@ -35,7 +35,10 @@ namespace PresentationPen
             bool fromInstaller = InstallSettings.ApplyIfNew(_settings);
             if (!fromInstaller && (firstRun || StartupService.IsEnabled)) StartupService.SetEnabled(true);
 
-            _overlay = new OverlayWindow(() => Settings);
+            _overlay = new OverlayWindow(() => Settings, () => _settings.DraftsFolder);
+            _overlay.SessionCleared += () => RememberSessionDraft(null);
+            // desenhos da última vez (inclusive antes de reiniciar o PC) voltam na primeira abertura
+            if (Settings.ReopenDrawings) _pendingRestore = ReadSessionDraft();
             _overlay.ScreenshotRequested += TakeScreenshot;
             _overlay.HelpRequested += ShowHelp;
             _overlay.DraftSaveRequested += SaveDraft;
@@ -98,6 +101,7 @@ namespace PresentationPen
 
         private void Open(BoardMode board, bool zoom)
         {
+            RestorePendingSession();
             var screen = WinForms.Screen.FromPoint(WinForms.Cursor.Position);
             BitmapSource? snapshot = null;
             if (zoom)
@@ -105,7 +109,54 @@ namespace PresentationPen
                 using var bmp = ScreenCaptureService.CaptureBitmap(screen.Bounds);
                 snapshot = ScreenCaptureService.ToBitmapSource(bmp);
             }
+            // voltando com desenhos de antes: mantém o quadro (branco/preto) em que eles foram feitos
+            if (board == BoardMode.None && Overlay.HasDrawings) board = Overlay.Board;
             Overlay.ShowOn(screen.Bounds, board, snapshot);
+        }
+
+        // ---------------------------------------------------------------- sessão (desenhos que voltam ao reabrir)
+
+        private string? _pendingRestore;
+
+        private static string SessionFile => Path.Combine(SettingsService.Folder, "last-session.txt");
+
+        /// <summary>Guarda qual rascunho tem os desenhos atuais, para reabri-los depois de reiniciar o app.</summary>
+        private static void RememberSessionDraft(string? path)
+        {
+            try
+            {
+                Directory.CreateDirectory(SettingsService.Folder);
+                if (path == null) File.Delete(SessionFile);
+                else File.WriteAllText(SessionFile, path);
+            }
+            catch (IOException) { }
+        }
+
+        private static string? ReadSessionDraft()
+        {
+            try
+            {
+                string path = File.Exists(SessionFile) ? File.ReadAllText(SessionFile).Trim() : "";
+                return path.Length > 0 && File.Exists(path) ? path : null;
+            }
+            catch (IOException) { return null; }
+        }
+
+        /// <summary>Na primeira abertura depois de iniciar o app, carrega os desenhos da última sessão.</summary>
+        private void RestorePendingSession()
+        {
+            string? path = _pendingRestore;
+            _pendingRestore = null;
+            if (path == null || Overlay.HasDrawings || Overlay.CurrentDraftPath != null) return;
+            try
+            {
+                // sem a imagem de fundo: os desenhos voltam sobre a tela atual, como ao sair e voltar (B mostra o fundo)
+                Overlay.LoadDraft(DraftStore.Load(path), path, withBackground: false);
+            }
+            catch (Exception ex)
+            {
+                App.LogError(ex);
+            }
         }
 
         // ---------------------------------------------------------------- screenshot
@@ -173,6 +224,7 @@ namespace PresentationPen
             {
                 bool updating = Overlay.CurrentDraftPath != null;
                 var (path, thumbnail) = await Overlay.SaveDraftAsync(_settings.DraftsFolder);
+                RememberSessionDraft(path);
                 ShowToast(updating ? "Rascunho atualizado" : "Rascunho salvo", path, thumbnail,
                     "Abra depois com Ctrl+O no modo desenho ou pelo menu da bandeja.", canOpen: false);
             }
@@ -213,11 +265,19 @@ namespace PresentationPen
 
             if (!Overlay.IsVisible) Open(doc.Board, zoom: false);
             Overlay.LoadDraft(doc, picker.SelectedPath, picker.UseBackground);
+            RememberSessionDraft(picker.SelectedPath);
             Overlay.Activate();
         }
 
-        private void OnDraftAutoSaved(string path, BitmapSource? thumbnail) =>
-            ShowToast("Rascunho atualizado", path, thumbnail, "Alterações salvas ao sair do modo desenho.", canOpen: false);
+        private void OnDraftAutoSaved(string path, BitmapSource? thumbnail)
+        {
+            RememberSessionDraft(path);
+            ShowToast("Rascunho salvo", path, thumbnail,
+                Settings.ReopenDrawings
+                    ? "Os desenhos voltam quando você reabrir o modo desenho. Delete limpa e começa outro."
+                    : "Abra depois com Ctrl+O no modo desenho ou pelo menu da bandeja.",
+                canOpen: false);
+        }
 
         // ---------------------------------------------------------------- menu
 
@@ -267,7 +327,8 @@ namespace PresentationPen
                 "  Ctrl+S  salvar rascunho (grava no rascunho aberto, se houver)\n" +
                 "  Ctrl+O  abrir um rascunho salvo para continuar (F2 na lista renomeia)\n" +
                 "  B  mostrar/ocultar a imagem de tela salva com o rascunho\n" +
-                "  Ao sair com Esc, as alterações no rascunho aberto são salvas.\n\n" +
+                "  Ao sair (Esc ou o atalho de desenhar), os desenhos são salvos como rascunho\n" +
+                "  e voltam quando você reabrir. Delete limpa e começa um rascunho novo.\n\n" +
                 "NO ZOOM\n" +
                 "  Roda do mouse  aproximar/afastar   Ctrl+roda  espessura\n" +
                 "  Mover o mouse  navegar             Espaço ou botão direito  travar/soltar\n" +
